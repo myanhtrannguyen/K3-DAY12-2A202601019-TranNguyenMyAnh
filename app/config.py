@@ -9,14 +9,15 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Toàn bộ cấu hình của service.
 
-    TODO (CP1): khai báo các trường dưới đây. pydantic-settings tự đọc biến
-    môi trường theo tên trường (không phân biệt hoa thường), nên trường
+    pydantic-settings tự đọc biến môi trường theo tên trường (không phân biệt
+    hoa thường), nên trường
     ``agent_api_key`` sẽ lấy giá trị từ biến ``AGENT_API_KEY``.
 
     | Trường                  | Kiểu  | Mặc định                   |
@@ -40,12 +41,39 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # TODO (CP1): khai báo 6 trường theo bảng trên, ví dụ:
-    #     port: int = 8000
-    #     agent_api_key: str
+    port: int = 8000
+    agent_api_key: str
+    redis_url: str = "redis://localhost:6379/0"
+    rate_limit_per_minute: int = 10
+    monthly_budget_usd: float = 10.0
+    log_level: str = "INFO"
+
+    @field_validator("agent_api_key")
+    @classmethod
+    def validate_agent_api_key(cls, value: str) -> str:
+        """Dừng ứng dụng sớm nếu secret bị để trống hoặc vẫn là mẫu giả."""
+        normalized = value.strip().lower()
+        placeholder_markers = (
+            "changeme",
+            "placeholder",
+            "replace_me",
+            "replace-me",
+            "your_api_key",
+            "your-api-key",
+        )
+
+        if not normalized or any(
+            marker in normalized for marker in placeholder_markers
+        ):
+            raise ValueError(
+                "AGENT_API_KEY must be set to a non-placeholder secret"
+            )
+
+        return value
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Đọc cấu hình một lần rồi cache lại (đọc env mỗi request là lãng phí)."""
     return Settings()
+
